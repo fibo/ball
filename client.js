@@ -76,6 +76,7 @@ class Ball extends HTMLElement {
       svg {
         background: gainsboro;
         border: 1px solid gray;
+        border-radius: 10px;
       }
       ellipse {
         fill: orange;
@@ -85,11 +86,21 @@ class Ball extends HTMLElement {
     </style>
   `
 
+  static containerMaxWidth = 400
+  static containerMinHeight = 600
+
   svg = createSvg(0, 0)
   ball = createSvgElement('ellipse')
 
+  /** Initial ball y coordinate. */
+  initialY = 70
+
   /** Ball radius, excluding stroke-width. */
   radius = 40
+
+  socket
+
+  width; height;
 
   constructor() {
     super()
@@ -99,21 +110,59 @@ class Ball extends HTMLElement {
   }
 
   connectedCallback() {
+    this.setDimensions()
+    this.createBall()
+    this.setBallToInitialPosition()
+    this.connectWebSocket()
+  }
+
+  handleEvent(event) {
+    if (event.type === 'click' && event.target === this.ball) {
+      this.socket.send('TOUCH')
+    }
+  }
+
+  connectWebSocket() {
+    const url = window.location.origin.replace(/^http/, 'ws')
+    const socket = this.socket = new WebSocket(url)
+
+    socket.addEventListener('open', () => {
+      console.info('Connected to', url)
+    })
+
+    socket.addEventListener('close', () => {
+      console.info('Disconnected')
+    })
+
+    socket.addEventListener('message', (event) => {
+      console.info('Message', event.data)
+    })
+  }
+
+  createBall() {
     const { ball, radius, svg } = this
 
-    const phi = 1.618
-    const width = Math.floor(innerWidth / phi)
-    const height = Math.floor(innerHeight / phi)
-    const initialY = 70
-
-    svg.resize(width, height)
-
     svg.appendChild(ball
-      .set('cx', width / 2)
-      .set('cy', initialY)
       .set('rx', radius)
       .set('ry', radius)
     )
+    ball.addEventListener('click', this)
+  }
+
+  setBallToInitialPosition() {
+    const { ball, initialY, width } = this
+
+    ball
+      .set('cx', width / 2)
+      .set('cy', initialY)
+  }
+
+  setDimensions() {
+    const phi = 1.618
+    this.width = Math.min(Math.floor(innerWidth / phi), Ball.containerMaxWidth)
+    this.height = Math.max(Math.floor(innerHeight / phi), Ball.containerMinHeight)
+
+    this.svg.resize(this.width, this.height)
   }
 }
 
