@@ -14,15 +14,51 @@
     body {
       min-height: 100%;
       font-family: system-ui;
+      font-size: 28px;
       display: flex;
       flex-direction: column;
+      margin: 0;
+      color: black;
     }
+
+     *::selection {
+       background: black;
+       color: orange;
+     }
 
     main {
       flex: 1;
       display: grid;
       place-items: center;
     }
+
+    info- {
+      padding: 1em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5em;
+    }
+
+    code {
+      font-family: ui-monospace, monospace;
+      background: orange;
+	    corner-shape: notch;
+      border-radius: 10px;
+      padding: 4px 20px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 1em;
+      justify-content: center;
+      padding: 1em;
+
+      button {
+        all: unset;
+      }
+    }
+
     noscript {
       margin: auto;
       font-size: 100px;
@@ -30,10 +66,20 @@
     }
   </style>
 </head>
+
 <body>
+  <info-></info->
+
   <main>
     <ball-></ball->
   </main>
+
+  <div class="actions">
+    <volume-></volume->
+  </div>
+
+  <web-socket></web-socket>
+
   <script type=module src="client.js"></script>
 
   <noscript>Enable JS</noscript>

@@ -4,17 +4,41 @@ import { networkInterfaces, platform } from 'node:os'
 
 const clients = new Set()
 
-const server = Bun.serve({
-  port: 8477, // 8477 == BALL
+const sendMessage = (socket, type, data) => {
+  socket.send(JSON.stringify({ type, data }))
+}
 
+const DEFAULT_GROUP = 'default'
+
+/** @type {'stopped'|'playing'|'disposing'} */
+let status = 'stopped'
+
+const broadcastMessage = (server, type, data, group = DEFAULT_GROUP) => {
+  server.publish(group, JSON.stringify({ type, data }))
+}
+
+const sendNumClients = (server) => {
+  const numClients = clients.size
+  console.info('Num clients:', numClients)
+  broadcastMessage(server, 'NUM_CLIENTS', numClients)
+}
+
+const sendStatus = (server) => {
+  broadcastMessage(server, 'STATUS', status)
+}
+
+const server = Bun.serve({
+  port: 8477, // BALL ~ 8477
+
+  // Enable access to external clients on the same network.
   hostname: '0.0.0.0',
 
-  async fetch(req) {
-    const success = server.upgrade(req, { data: { clientId: crypto.randomUUID() } })
+  async fetch(request) {
+    const success = server.upgrade(request, { data: { clientId: crypto.randomUUID() } })
     if (success)
       return
 
-    const url = new URL(req.url)
+    const url = new URL(request.url)
 
     // Ignore URL from Chrome DevTools
     if (url.pathname === '/.well-known/appspecific/com.chrome.devtools.json')
@@ -28,45 +52,62 @@ const server = Bun.serve({
   websocket: {
     data: {},
 
-    close(ws) {
-      const clientId = ws.data.clientId
-      clients.delete(clientId)
-      console.info('Num clients:', clients.size)
-    },
-
-    open(ws) {
-      const clientId = ws.data.clientId
+    open(socket) {
+      const clientId = socket.data.clientId
       clients.add(clientId)
-      console.info('Num clients:', clients.size)
+
+      sendMessage(socket, 'SERVER_ORIGIN', `${externalURL.hostname}:${externalURL.port}`)
+
+      socket.subscribe(DEFAULT_GROUP)
+      sendNumClients(server)
+      status = 'stopped'
+      sendStatus(server)
     },
 
-    message(ws, data) {
-      const clientId = ws.data.clientId
-      console.info('Message from clientId', clientId, data)
+    close(socket) {
+      const clientId = socket.data.clientId
+      clients.delete(clientId)
+
+      socket.subscribe(DEFAULT_GROUP)
+      sendNumClients(server)
+      sendStatus(server)
     },
 
-    drain(ws) {
-      console.warn('backpressure' + ws.getBufferedAmount())
+    message(_socket, data) {
+      const { type } = JSON.parse(data)
+
+      if (type === 'TOUCH') {
+        if (status === 'stopped')
+          status = 'playing'
+        else if (status === 'playing')
+          status = 'stopped'
+        sendStatus(server)
+      }
+    },
+
+    drain(socket) {
+      console.warn('backpressure' + socket.getBufferedAmount())
     }
   }
 })
 
-const serverUrl = new URL(server.url)
+const localUrl = `http://localhost:${server.url.port}`
+let externalURL = new URL(localUrl)
 
-// Find local IP
-let address = 'localhost'
+// Look for IPv4 net interface.
 const nets = networkInterfaces()
 for (const name of Object.keys(nets))
   for (const net of nets[name])
-    // Skip over non-IPv4 and internal (loopback) addresses
-    if (net.family === "IPv4" && !net.internal)
-      serverUrl.hostname = address
+    if (net.family === 'IPv4' && !net.internal) {
+      externalURL = new URL(`http://${net.address}:${server.url.port}`)
+      break
+    }
 
 // Open default browser.
 switch(platform()) {
-	case 'darwin': exec(`open ${serverUrl}`)
-	case 'linux': exec(`xdg-open ${serverUrl}`)
-	case 'win32': exec(`start ${serverUrl}`)
+	case 'darwin': exec(`open ${localUrl}`)
+	case 'linux': exec(`xdg-open ${localUrl}`)
+	case 'win32': exec(`start ${localUrl}`)
   default:
-    console.info('Server running on:', '\x1b[32m', serverUrl.origin, '\x1b[0m')
+    console.info('Server running on:', '\x1b[32m', externalURL.origin, '\x1b[0m')
 }
