@@ -405,14 +405,21 @@ class Info extends HTMLElement {
 
   serverOrigin = h('code')
   numClients = h('div')
+  qrcode = h('div', { id: 'qrcode', hidden: 'true' })
 
   connectedCallback() {
-    const { numClients, serverOrigin } = this
+    const { numClients, qrcode, serverOrigin } = this
 
     // During the demo, external clients do not need the connection info.
     // They are already connected, other spectators can see it at the projector screen.
-    if (location.hostname === 'localhost')
+    const isDemoPage = location.hostname === 'localhost'
+
+    if (isDemoPage) {
       this.append(serverOrigin)
+      document.body.append(qrcode)
+
+      serverOrigin.addEventListener('dblclick', this)
+    }
 
     this.append(numClients)
 
@@ -421,11 +428,20 @@ class Info extends HTMLElement {
       numClients.textContent = `Num players: ${data}`
     })
 
-    subscribe('SERVER_ORIGIN', (data) => {
-      if (data === undefined) return
-      if (location.hostname === 'localhost')
-        serverOrigin.textContent = data
+    subscribe('SERVER_ORIGIN', (origin) => {
+      if (origin === undefined) return
+      if (!isDemoPage) return
+      serverOrigin.textContent = origin
+      new QRCode(qrcode, `http://${origin}`);
     })
+  }
+
+  handleEvent(event) {
+    const { qrcode, serverOrigin } = this
+
+    if (event.type === 'dblclick' && event.target === serverOrigin) {
+      qrcode.hidden = !qrcode.hidden
+    }
   }
 }
 
